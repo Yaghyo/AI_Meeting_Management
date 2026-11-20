@@ -1,47 +1,147 @@
-# Meeting AI
+# AI Meeting Management
 
-Phase 1 foundation for the meeting assistant. The app currently provides employee registration/login, a custom username-based user, employee profiles, meeting scheduling, and a private meeting dashboard. Development uses SQLite and the Asia/Kolkata timezone.
+<p align="center">
+  <strong>Meet, understand what was decided, and keep project work moving.</strong>
+</p>
 
-## Run locally (Windows PowerShell)
+<p align="center">
+  <img alt="Django 5.2" src="https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white">
+  <img alt="Python 3.13" src="https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white">
+  <img alt="LiveKit" src="https://img.shields.io/badge/Meetings-LiveKit-7B2BF9?logo=livekit&logoColor=white">
+  <img alt="AI powered by Groq" src="https://img.shields.io/badge/AI-Groq-F55036">
+</p>
+
+AI Meeting Management is a web app for scheduling and joining live meetings, capturing speech transcripts, and turning meeting conversations into summaries, decisions, project groups, and assigned tasks.
+
+## What it does
+
+- **Accounts:** Register and sign in with a unique email address.
+- **Meetings:** Schedule meetings, invite participants with a link, and join from a browser.
+- **Live meeting tools:** Audio, camera, screen sharing, participant list, meeting chat, and presentation pinning.
+- **AI meeting listener:** A LiveKit agent joins the room and transcribes speech. Meeting audio and video are not stored.
+- **Meeting follow-up:** When the organizer ends a meeting, Groq can generate a summary, key points, decisions, project details, and action items with owners and due dates when supported by the transcript.
+- **Project groups:** Meeting participants can continue in a shared project chat, with member management and unread message counts.
+- **Project assistant:** Each group member has a private AI chat grounded in that project's meeting information.
+- **Database options:** SQLite for a quick local start, or PostgreSQL for a shared development database.
+
+## How the AI workflow fits together
+
+```mermaid
+flowchart LR
+    P[Meeting participants] --> LK[LiveKit room]
+    LK --> A[AI listener]
+    A --> STT[Silero VAD + Deepgram]
+    STT --> T[Saved transcript]
+    T --> G[Groq meeting analysis]
+    G --> R[Summary, decisions, project group, tasks]
+    R --> C[Project chat and private project assistant]
+```
+
+## Requirements
+
+- Python 3.13 (the project environment was created with Python 3.13)
+- A LiveKit Cloud project or reachable self-hosted LiveKit server
+- Deepgram API key for speech transcription
+- Groq API key for meeting summaries, task extraction, and project AI chat
+- PostgreSQL only if you choose PostgreSQL instead of the default SQLite setup
+
+## Quick start on Windows
+
+Open PowerShell in the project directory:
 
 ```powershell
-py -m venv .venv
+py -3.13 -m venv .venv
+Set-ExecutionPolicy -Scope Process Bypass
 .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-python manage.py makemigrations accounts meetings
+Copy-Item .env.example .env
+```
+
+Edit `.env` and set a private Django secret key. You can generate one with:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(50))"
+```
+
+Then run the database migrations and start Django:
+
+```powershell
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
 ```
 
-Open http://127.0.0.1:8000/. Register an employee account, or sign in with the superuser. Django admin is at `/admin/`.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Register an account or sign in with the admin account you created. The Django admin is at `/admin/`.
 
-## Connect LiveKit
+## Configure meetings and AI
 
-1. Create a LiveKit Cloud project or configure a reachable self-hosted LiveKit server.
-2. Copy `.env.example` to `.env` and fill in `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` from the LiveKit project/server settings. Keep `.env` private; it is git-ignored.
-3. Add a Deepgram API key to `.env` as `DEEPGRAM_API_KEY`. Deepgram provides the real-time speech recognition; Silero runs locally for speech detection.
-4. Install the agent dependencies and start the separate worker in a second PowerShell window:
+Set these values in `.env`:
 
-   ```powershell
-   .\meeting\Scripts\python.exe -m pip install -r requirements.txt
-   .\meeting\Scripts\python.exe agent\worker.py dev
-   ```
+| Variable | Purpose |
+| --- | --- |
+| `DJANGO_SECRET_KEY` | Django session and security signing key. Keep it private. |
+| `LIVEKIT_URL` | WebSocket URL for your LiveKit server. |
+| `LIVEKIT_API_KEY` | LiveKit API key used to create room tokens. |
+| `LIVEKIT_API_SECRET` | Matching LiveKit API secret. |
+| `DEEPGRAM_API_KEY` | Speech-to-text service used by the meeting listener. |
+| `GROQ_API_KEY` | Groq key used for meeting reports and project AI. |
+| `GROQ_MODEL` | Optional model override; defaults to `openai/gpt-oss-120b`. |
+| `DB_ENGINE` | `sqlite` by default; set to `postgresql` to use PostgreSQL. |
 
-5. Keep the worker running, restart Django, schedule a meeting, and join it. Everyone who joins can see the saved live captions in the meeting. Captions are stored as text; meeting audio/video are not recorded or saved.
+Keep `.env` private and never commit it. `.env.example` is the safe template to share; put only blank values or non-secret defaults in that file.
 
-The Django server issues a short-lived token scoped to that meeting and the signed-in username. The browser connects to LiveKit for live audio/video. This app does not record or store meeting media. The browser loads the pinned LiveKit client SDK from jsDelivr, so users need internet access to that CDN as well as a connection to the LiveKit server.
+### Start the AI listener
 
-The built-in database is for local development. Do not deploy with the development secret key or `DEBUG=True`. Set `DEEPGRAM_MODEL` or `DEEPGRAM_LANGUAGE` in `.env` if you want to change the default transcription model or language mode. The AI listener worker must be running when a room is first opened so LiveKit can dispatch it.
+The web app and listener run as separate processes. After configuring LiveKit and Deepgram, open another PowerShell window in the project directory and run:
 
-## Test camera and microphone from another device
+```powershell
+.\.venv\Scripts\python.exe agent\worker.py dev
+```
 
-Browsers require HTTPS for camera and microphone access on a phone or another computer. `localhost` on that second device points to that device, and a plain `http://<LAN-IP>:8000` page is not a secure context. Use a temporary HTTPS tunnel for local testing:
+Keep the listener running while meetings are active. It joins rooms through LiveKit, applies Silero voice activity detection, and sends speech to Deepgram for transcription. When an organizer ends a meeting, the app uses the saved transcript to create the AI report and project follow-up.
 
-1. Install `cloudflared` for Windows from the [Cloudflare downloads page](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/).
-2. Start Django in one PowerShell window: `python manage.py runserver 127.0.0.1:8000`.
-3. In a second window, run `cloudflared tunnel --url http://127.0.0.1:8000`. Copy the temporary `https://...trycloudflare.com` URL it prints.
-4. Add that exact host to `.env`: set `DJANGO_DEBUG=False`, add the host (without `https://`) to `DJANGO_ALLOWED_HOSTS`, set `DJANGO_CSRF_TRUSTED_ORIGINS` to the full `https://...` origin, and set `DJANGO_TRUST_PROXY_SSL=True`.
-5. Restart Django, open the HTTPS URL on both devices, sign in, open the meeting, and allow camera/microphone access.
+### Use PostgreSQL
 
-The tunnel URL is temporary and anyone who has it can reach your local app while the tunnel runs. Stop the tunnel when finished. Restore `DJANGO_DEBUG=True`, local-only `DJANGO_ALLOWED_HOSTS`, an empty `DJANGO_CSRF_TRUSTED_ORIGINS`, and `DJANGO_TRUST_PROXY_SSL=False` for normal local development.
+The default configuration uses the local `db.sqlite3` file. To use PostgreSQL, create a database and application role, then set these values in `.env`:
+
+```dotenv
+DB_ENGINE=postgresql
+POSTGRES_DB=meeting_ai
+POSTGRES_USER=meeting_ai_app
+POSTGRES_PASSWORD=your-local-database-password
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+```
+
+Make sure PostgreSQL is running and the role has access to the database, then apply migrations:
+
+```powershell
+python manage.py migrate
+```
+
+Switching `DB_ENGINE` changes which database Django connects to; it does not copy data between SQLite and PostgreSQL.
+
+## Test from another device
+
+Camera and microphone access on phones and other computers requires HTTPS. For a temporary local test, run Django and expose it through a trusted HTTPS tunnel such as [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/). Configure `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, and `DJANGO_TRUST_PROXY_SSL` for the tunnel URL, then open that HTTPS address on both devices. Stop the tunnel after testing; its temporary URL gives access to your local app while it is running.
+
+## Project layout
+
+```text
+agent/                  LiveKit meeting listener
+apps/accounts/          Registration, email login, and user profiles
+apps/meetings/          Meetings, transcripts, AI reports, and action items
+apps/projects/          Project groups, chats, and project AI
+config/                 Django settings and URL configuration
+templates/              Django HTML templates
+scripts/                Synthetic Groq meeting demo
+```
+
+## Privacy and deployment notes
+
+- Meeting audio and video are streamed through LiveKit; this app does not save the media.
+- Speech transcripts and AI-generated meeting reports are saved in the configured database.
+- Keep API keys, database passwords, and `DJANGO_SECRET_KEY` out of source control.
+- Before deploying publicly, configure a strong secret key, `DJANGO_DEBUG=False`, production hosts and HTTPS settings, and a production-grade database. The development server is for local use only.
+
