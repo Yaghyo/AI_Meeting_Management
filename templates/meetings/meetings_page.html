@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block title %}Meetings · AI Meeting Management{% endblock %}
+{% block content %}
+<section class="page-heading"><div><h1>Meetings</h1><p class="muted">Scheduled, live, and completed meetings.</p></div><a class="button" href="{% url 'meeting_create' %}">＋ Schedule meeting</a></section>
+{% for meeting in meetings %}
+<article class="meeting-row"><div><h3><a href="{% url 'meeting_detail' meeting.pk %}">{{ meeting.title }}</a></h3><p>{{ meeting.scheduled_at|date:'D, d M Y · H:i' }} IST{% if meeting.ends_at %} – {{ meeting.ends_at|date:'H:i' }} IST{% endif %} · {{ meeting.get_status_display }}</p><small>Organizer: {{ meeting.created_by.username }} · {{ meeting.participants.count }} participants</small></div><div class="actions">{% if meeting.status == 'scheduled' or meeting.status == 'live' %}<a class="button" href="{% url 'meeting_room' meeting.pk %}">Join meeting</a>{% else %}<a href="{% url 'meeting_detail' meeting.pk %}">Meeting details</a>{% endif %}</div></article>
+{% empty %}<article class="empty-state"><h2>No meetings scheduled</h2><p>Create the first meeting to get started.</p></article>{% endfor %}
+{% endblock %}

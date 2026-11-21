@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}My profile · AI Meeting Management{% endblock %}
+{% block content %}
+<div class="profile-shell">
+  <header class="profile-hero">
+    <div class="profile-hero-avatar">{{ profile.full_name|default:user.username|first|upper }}</div>
+    <div><div class="eyebrow">YOUR WORKSPACE PROFILE</div><h1>Professional profile</h1><p>Help Project AI tailor practical ideas to your experience and strengths.</p></div>
+    <a class="profile-back-link" href="{% url 'dashboard' %}">Back to meetings</a>
+  </header>
+
+  <div class="profile-layout">
+    <form class="profile-form-card" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="profile-form-errors">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="profile-form-heading"><div><h2>Your details</h2><p>Only you can edit this profile.</p></div><span class="profile-private-badge">Private</span></div>
+      <div class="profile-fields">
+        {% for field in form.visible_fields %}
+          {% if field.name != 'remove_resume' %}
+            <div class="profile-field {% if field.name == 'experience' or field.name == 'skills' or field.name == 'resume' %}profile-field-wide{% endif %}">
+              {{ field.label_tag }}{{ field }}
+              {% if field.help_text %}<small class="profile-help">{{ field.help_text }}</small>{% endif %}
+              {% for error in field.errors %}<small class="profile-error">{{ error }}</small>{% endfor %}
+              {% if field.name == 'resume' and profile.resume %}<small class="profile-current-resume">Saved resume: {{ profile.resume.name|cut:'employee_resumes/' }}</small>{% endif %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        {% if profile.resume %}<label class="profile-remove-resume">{{ form.remove_resume }} Remove the saved resume</label>{% endif %}
+      </div>
+      <div class="profile-ai-disclosure"><span>✦</span><p><strong>How Project AI uses your profile</strong><br>When you ask Project AI, it may send your professional experience, skills, resume text, and relevant details from this project to Groq to generate a response. Your age is saved here but is not sent to or used by the AI. This profile stays private to your account.</p></div>
+      <div class="profile-save-row"><button type="submit">Save profile</button></div>
+    </form>
+
+    <aside class="profile-side-card">
+      <div class="profile-side-icon">✦</div><div class="eyebrow">PERSONALIZED PROJECT AI</div><h2>Turn experience into better outcomes</h2>
+      <p>Project AI can connect your professional strengths to the project’s goals, decisions, and tasks, then suggest practical ways to move the work forward.</p>
+      <ul><li><strong>Clear outcome</strong><span>What result the idea is meant to improve.</span></li><li><strong>Metric to follow up</strong><span>How to measure progress. Suggested targets are labeled as suggestions.</span></li><li><strong>Useful levers</strong><span>Skills, people, decisions, and resources the project can build on.</span></li></ul>
+      <div class="profile-side-foot">Short, scannable recommendations grounded in your project.</div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

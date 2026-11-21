@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Meetings · AI Meeting Management{% endblock %}
+{% block content %}
+<section class="page-heading"><h1>Meetings</h1><a class="button" href="{% url 'meeting_create' %}">＋ Schedule meeting</a></section>
+{% if meetings %}
+  {% for meeting in meetings %}
+    <article class="meeting-row"><div><h3><a href="{% url 'meeting_detail' meeting.pk %}">{{ meeting.title }}</a></h3><p>{{ meeting.scheduled_at|date:'D, d M Y · H:i' }} IST{% if meeting.ends_at %} – {{ meeting.ends_at|date:'H:i' }} IST{% endif %}<span class="muted"> · {{ meeting.get_status_display }}</span></p><small>Organizer: {{ meeting.created_by.username }} · {{ meeting.participants.count }} participant{{ meeting.participants.count|pluralize }}</small></div>
+      <div class="actions"><a class="button" href="{% url 'meeting_room' meeting.pk %}">Join meeting</a>{% if meeting.created_by_id == user.id or user.is_staff or user.role == 'admin' %}<a href="{% url 'meeting_edit' meeting.pk %}">Edit</a><form method="post" action="{% url 'meeting_delete' meeting.pk %}">{% csrf_token %}<button class="button-secondary" type="submit">Delete</button></form>{% endif %}</div>
+    </article>
+  {% endfor %}
+{% endif %}
+{% endblock %}

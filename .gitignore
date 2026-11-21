@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+db.sqlite3
+db.sqlite3.pre-postgres-backup
+.venv/
+.env
+staticfiles/
+media/
+# Local Python virtual environment
+meeting/

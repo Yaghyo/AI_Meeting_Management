@@ -1,0 +1,3 @@
+{% extends 'base.html' %}
+{% block title %}Chat with {{ other.username }} · AI Meeting Management{% endblock %}
+{% block content %}<p><a href="{% url 'dashboard' %}">← Dashboard</a></p><h1>Chat with {{ other.get_full_name|default:other.username }}</h1><p class="muted">Personal chat. Project AI is not included in personal conversations.</p><article class="chat-log">{% for message in chat_messages %}<p><strong>{{ message.sender.username }}</strong> <small>{{ message.created_at|date:'d M, H:i' }}</small><br>{{ message.body }}</p>{% empty %}<p>No messages yet.</p>{% endfor %}</article><form method="post">{% csrf_token %}<textarea name="body" required maxlength="4000" aria-label="Message"></textarea><button type="submit">Send</button></form>{% endblock %}

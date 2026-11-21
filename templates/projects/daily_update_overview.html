@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Team daily updates · AI Meeting Management{% endblock %}
+{% block content %}
+<div class="daily-page admin-daily-page">
+  <header class="daily-hero"><div class="daily-hero-mark admin-mark">◷</div><div><div class="eyebrow">ADMIN · PROJECT VISIBILITY</div><h1>Team daily updates</h1><p>Review submitted work and see who still needs to report for a project.</p></div></header>
+  <section class="daily-filter-card"><form method="get"><div><label for="filter-project">Project</label><select name="project" id="filter-project"><option value="">All projects</option>{% for project in projects %}<option value="{{ project.public_id }}" {% if selected_project.pk == project.pk %}selected{% endif %}>{{ project.name }} · {{ project.public_id }}</option>{% endfor %}</select></div><div><label for="filter-date">Date</label><input type="date" name="date" id="filter-date" value="{{ selected_date|date:'Y-m-d' }}"></div><button type="submit">View updates</button></form></section>
+
+  {% if selected_project %}<section class="daily-missing-card"><div><div class="eyebrow">REPORTING STATUS</div><h2>{{ selected_project.name }} · {{ selected_date|date:'d M Y' }}</h2><p>{% if missing_users %}{{ missing_users|length }} project member{{ missing_users|length|pluralize }} have not submitted an update for this date.{% else %}All active project members have submitted an update for this date.{% endif %}</p></div><div class="missing-people">{% for person in missing_users %}<span>{{ person.get_full_name|default:person.username }}</span>{% empty %}<strong>All reports received</strong>{% endfor %}</div></section>{% endif %}
+
+  <section class="daily-today-list admin-updates-list"><div class="daily-section-heading"><div><div class="eyebrow">SUBMISSIONS</div><h2>Work reported · {{ selected_date|date:'d M Y' }}</h2></div><span>{{ updates|length }} update{{ updates|length|pluralize }}</span></div>
+    {% for update in updates %}<article class="admin-update-card"><div class="admin-update-top"><div class="daily-project-dot">{{ update.user.username|first|upper }}</div><div class="daily-preview-copy"><strong>{{ update.user.get_full_name|default:update.user.username }}</strong><small>{{ update.user.email }} · {{ update.project.name }} · {{ update.submitted_at|date:'H:i' }}</small></div>{% if update.no_work_today %}<span class="daily-saved-tag no-work-tag">No work</span>{% elif update.hours_worked %}<span class="daily-saved-tag">{{ update.hours_worked }} hrs</span>{% endif %}</div>
+      <div class="admin-update-sections"><div><strong>Working on</strong><p>{{ update.working_on|default:'—'|linebreaksbr }}</p></div><div><strong>Completed today</strong><p>{% if update.no_work_today %}No project work reported.{% else %}{{ update.completed_today|default:'—'|linebreaksbr }}{% endif %}</p></div><div><strong>Remaining</strong><p>{{ update.remaining_work|default:'—'|linebreaksbr }}</p></div><div><strong>Blockers</strong><p>{{ update.blockers|default:'None reported'|linebreaksbr }}</p></div></div>
+    </article>{% empty %}<div class="daily-empty">No updates found for the selected date and project.</div>{% endfor %}
+  </section>
+
+  <section class="admin-question-card"><div class="daily-side-icon">✦</div><div><div class="eyebrow">QUESTIONS FOR THE ADMIN ASSISTANT</div><h2>Daily project questions this data can support</h2><div class="admin-question-list">{% for question in assistant_questions %}<span>{{ question }}</span>{% endfor %}</div><p>These are examples for the planned admin chatbot; it is not enabled yet.</p></div></section>
+</div>
+{% endblock %}

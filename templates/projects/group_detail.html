@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+{% block title %}{{ group.project.name }} · AI Meeting Management{% endblock %}
+{% block body_class %}project-page{% endblock %}
+{% block content %}
+<div class="project-workspace">
+  <header class="project-workspace-head">
+    <div class="project-avatar">{{ group.project.name|first|upper }}</div>
+    <div class="project-title"><h1>{{ group.project.name }}</h1><p>Project ID · {{ group.project.public_id|truncatechars:18 }}</p></div>
+    <div class="project-head-status"><span class="online-dot"></span> Project space</div>
+  </header>
+
+  {% if not group.project_manager and is_member %}
+  <div class="manager-callout"><span>Choose a project manager to enable member management.</span><form method="post" action="{% url 'volunteer_manager' group.pk %}">{% csrf_token %}<button type="submit" class="manager-claim">I can manage this project</button></form></div>
+  {% endif %}
+
+  <div class="project-workspace-grid">
+    <section class="conversation-card" aria-label="Project conversation">
+      <div class="conversation-topline">
+        <div><div class="eyebrow">PROJECT CONVERSATION</div><h2>{{ group.project.name }}</h2></div>
+        <div class="conversation-members-preview" title="{{ members|length }} project members">
+          {% for member in members|slice:":4" %}<span>{{ member.get_full_name|default:member.username|first|upper }}</span>{% endfor %}
+          {% if members|length > 4 %}<span class="avatar-overflow">+{{ members|length|add:"-4" }}</span>{% endif %}
+        </div>
+      </div>
+
+      <div class="conversation-tabs" role="tablist" aria-label="Conversation type">
+        <button class="conversation-tab active" type="button" role="tab" aria-selected="true" data-conversation-tab="group">Group chat</button>
+        <button class="conversation-tab" type="button" role="tab" aria-selected="false" data-conversation-tab="ai">✦ Project AI <span class="private-chip">Private</span></button>
+      </div>
+
+      <section class="conversation-panel active" data-conversation-panel="group" role="tabpanel">
+        <div class="conversation-scroll" id="group-chat-log" aria-live="polite">
+          {% for message in messages_list %}
+            <article class="message-row {% if message.sender_id == user.id %}message-own{% endif %}">
+              {% if message.sender_id != user.id %}<div class="message-avatar">{{ message.sender.get_full_name|default:message.sender.username|first|upper }}</div>{% endif %}
+              <div class="message-content"><div class="message-meta"><strong>{% if message.sender_id == user.id %}You{% else %}{{ message.sender.get_full_name|default:message.sender.username }}{% endif %}</strong><time>{{ message.created_at|date:'d M · H:i' }}</time></div><div class="message-bubble">{{ message.body|linebreaksbr }}</div></div>
+            </article>
+          {% empty %}
+            <div class="conversation-empty"><div class="empty-spark">✦</div><h3>Start the project conversation</h3><p>Share an update, ask a question, or let the team know what’s next.</p></div>
+          {% endfor %}
+        </div>
+        <form class="message-composer" method="post">
+          {% csrf_token %}<label class="visually-hidden" for="group-message">Message to the group</label>
+          <textarea id="group-message" name="body" required maxlength="4000" rows="1" placeholder="Write a message…"></textarea>
+          <button type="submit" aria-label="Send message" title="Send message"><span>➤</span></button>
+        </form>
+      </section>
+
+      <section class="conversation-panel" data-conversation-panel="ai" role="tabpanel" hidden>
+        <div class="ai-context-banner"><span>✦</span><div><strong>Project AI</strong><small>Private to you · Answers from this project’s meeting notes and tasks</small></div></div>
+        <div class="conversation-scroll ai-scroll" id="project-ai-log" aria-live="polite">
+          {% for item in ai_messages %}
+            <article class="message-row {% if item.role == 'user' %}message-own{% else %}ai-message-row{% endif %}">
+              {% if item.role == 'assistant' %}<div class="ai-avatar">✦</div>{% endif %}
+              <div class="message-content"><div class="message-meta"><strong>{% if item.role == 'user' %}You{% else %}Project AI{% endif %}</strong><time>{{ item.created_at|date:'d M · H:i' }}</time></div><div class="message-bubble">{{ item.body|linebreaksbr }}</div></div>
+            </article>
+          {% empty %}
+            <div class="conversation-empty"><div class="empty-spark">✦</div><h3>Ask your project assistant</h3><p>Ask about a decision, meeting detail, project update, or assigned task.</p></div>
+          {% endfor %}
+        </div>
+        <form class="message-composer ai-composer" method="post" action="{% url 'project_ai_chat' group.pk %}">
+          {% csrf_token %}<label class="visually-hidden" for="ai-question">Ask the project assistant</label>
+          <textarea id="ai-question" name="body" required maxlength="4000" rows="1" placeholder="Ask about this project…"></textarea>
+          <button type="submit" aria-label="Ask Project AI" title="Ask Project AI"><span>➤</span></button>
+        </form>
+      </section>
+    </section>
+
+    <aside class="project-info-card" aria-label="Project members and tasks">
+      <div class="info-card-heading"><div><div class="eyebrow">THE TEAM</div><h2>People <span>{{ members|length }}</span></h2></div>
+        {% if is_manager %}<details class="member-add"><summary aria-label="Add a member">＋ <span>Add</span></summary><form method="post" action="{% url 'manage_group_member' group.pk %}">{% csrf_token %}<input type="hidden" name="action" value="add"><label for="member-select">Add someone to this project</label><select name="user_id" id="member-select" required>{% for person in other_users %}<option value="{{ person.pk }}">{{ person.get_full_name|default:person.username }}</option>{% empty %}<option disabled>No available users</option>{% endfor %}</select><button type="submit" {% if not other_users %}disabled{% endif %}>Add member</button></form></details>{% endif %}
+      </div>
+      <div class="project-member-list">
+        {% for member in members %}
+        <article class="project-member">
+          <div class="member-avatar">{{ member.get_full_name|default:member.username|first|upper }}</div>
+          <div class="member-copy"><strong>{{ member.get_full_name|default:member.username }}</strong><small>{% if member.pk == group.project_manager_id %}Project manager{% elif member.pk == user.id %}You{% else %}Project member{% endif %}</small></div>
+          {% if is_manager and member.pk != group.project_manager_id %}<form method="post" action="{% url 'manage_group_member' group.pk %}" onsubmit="return confirm('Remove {{ member.get_full_name|default:member.username|escapejs }} from this project?')">{% csrf_token %}<input type="hidden" name="user_id" value="{{ member.pk }}"><input type="hidden" name="action" value="remove"><button class="member-remove" type="submit" aria-label="Remove {{ member.username }}">Remove</button></form>{% endif %}
+          <div class="member-tasks"><span>ASSIGNED TASKS</span>{% for task in member.project_tasks %}<div class="mini-task"><i class="task-status status-{{ task.status }}"></i><div><strong>{{ task.title }}</strong><small>{{ task.get_status_display }}{% if task.due_date %} · Due {{ task.due_date|date:'M j' }}{% endif %}</small></div></div>{% empty %}<small class="no-tasks">No assigned tasks yet</small>{% endfor %}</div>
+        </article>
+        {% empty %}<p class="no-tasks">No members have been added yet.</p>{% endfor %}
+      </div>
+      {% if unassigned_tasks %}<div class="unassigned-tasks"><h3>Needs an owner</h3>{% for task in unassigned_tasks %}<div class="mini-task"><i class="task-status status-{{ task.status }}"></i><div><strong>{{ task.title }}</strong><small>{{ task.get_status_display }}{% if task.due_date %} · Due {{ task.due_date|date:'M j' }}{% endif %}</small></div></div>{% endfor %}</div>{% endif %}
+      <div class="project-description"><div class="eyebrow">ABOUT THIS PROJECT</div><p>{{ group.project.description|default:'Project notes and details will appear here.' }}</p><small>Manager: {% if group.project_manager %}{{ group.project_manager.get_full_name|default:group.project_manager.username }}{% else %}Not assigned{% endif %}</small></div>
+    </aside>
+  </div>
+</div>
+<script>
+(() => {
+  const tabs = [...document.querySelectorAll('[data-conversation-tab]')];
+  const panels = [...document.querySelectorAll('[data-conversation-panel]')];
+  for (const tab of tabs) tab.addEventListener('click', () => {
+    const selected = tab.dataset.conversationTab;
+    for (const item of tabs) {
+      const active = item === tab;
+      item.classList.toggle('active', active);
+      item.setAttribute('aria-selected', String(active));
+    }
+    for (const panel of panels) {
+      const active = panel.dataset.conversationPanel === selected;
+      panel.hidden = !active;
+      panel.classList.toggle('active', active);
+    }
+  });
+  for (const form of document.querySelectorAll('.message-composer')) {
+    const textarea = form.querySelector('textarea');
+    textarea.addEventListener('input', () => {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
+    });
+    textarea.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+  }
+  const chat = document.getElementById('group-chat-log');
+  const ai = document.getElementById('project-ai-log');
+  if (chat) chat.scrollTop = chat.scrollHeight;
+  if (ai) ai.scrollTop = ai.scrollHeight;
+
+  function appendMessage(target, {sender, body, createdAt, own = false, aiMessage = false}) {
+    target.querySelector('.conversation-empty')?.remove();
+    const row = document.createElement('article');
+    row.className = `message-row${own ? ' message-own' : ''}${aiMessage ? ' ai-message-row' : ''}`;
+    if (aiMessage) {
+      const avatar = document.createElement('div');
+      avatar.className = 'ai-avatar';
+      avatar.textContent = '✦';
+      row.appendChild(avatar);
+    }
+    const content = document.createElement('div');
+    content.className = 'message-content';
+    const meta = document.createElement('div');
+    meta.className = 'message-meta';
+    const name = document.createElement('strong');
+    name.textContent = sender;
+    const time = document.createElement('time');
+    time.textContent = createdAt ? new Date(createdAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : 'Now';
+    meta.append(name, time);
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.textContent = body;
+    content.append(meta, bubble);
+    row.appendChild(content);
+    target.appendChild(row);
+    target.scrollTop = target.scrollHeight;
+  }
+
+  async function submitMessage(form, onSuccess) {
+    const button = form.querySelector('button[type="submit"]');
+    const textarea = form.querySelector('textarea');
+    if (!textarea.value.trim()) return;
+    const oldButton = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span>…</span>';
+    try {
+      const response = await fetch(form.action || window.location.href, {
+        method: 'POST',
+        headers: {'Accept': 'application/json'},
+        credentials: 'same-origin',
+        body: new FormData(form),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Message could not be sent.');
+      textarea.value = '';
+      textarea.style.height = 'auto';
+      onSuccess(data);
+    } catch (error) {
+      window.alert(error.message || 'Message could not be sent. Check your connection and try again.');
+    } finally {
+      button.disabled = false;
+      button.innerHTML = oldButton;
+      textarea.focus();
+    }
+  }
+
+  const groupForm = document.querySelector('.conversation-panel[data-conversation-panel="group"] .message-composer');
+  groupForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitMessage(groupForm, (data) => appendMessage(chat, {
+      sender: data.sender, body: data.body, createdAt: data.created_at, own: true,
+    }));
+  });
+
+  const aiForm = document.querySelector('.conversation-panel[data-conversation-panel="ai"] .message-composer');
+  aiForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitMessage(aiForm, (data) => {
+      appendMessage(ai, {sender: 'You', body: data.question, own: true});
+      appendMessage(ai, {sender: 'Project AI', body: data.answer, aiMessage: true});
+    });
+  });
+})();
+</script>
+{% endblock %}

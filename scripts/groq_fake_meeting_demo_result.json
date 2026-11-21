@@ -1,0 +1,44 @@
+{
+  "model": "Groq / openai/gpt-oss-120b",
+  "summary": "The team coordinated the Atlas launch planning, assigning responsibilities for the customer dashboard prototype, regression testing, and API schema confirmation, and decided to use the existing PostgreSQL database with release contingent on test results.",
+  "key_points": [
+    "The customer dashboard needs a final prototype before launch",
+    "Priya will own the dashboard prototype delivery",
+    "Alex will run regression tests after the prototype is ready",
+    "Morgan will confirm the production API response schema with the backend team",
+    "The team will use the existing PostgreSQL database",
+    "Release will occur after Alex's regression tests pass"
+  ],
+  "decisions": [
+    "we will use the existing PostgreSQL database and release after Alex's tests pass"
+  ],
+  "project_name": "Atlas Launch",
+  "project_description": "Planning and execution of the Atlas product launch, covering delivery of a final customer dashboard prototype, confirmation of the production API response schema, and regression testing before release.",
+  "action_items": [
+    {
+      "title": "Deliver dashboard prototype",
+      "description": "Create and deliver the final prototype of the customer dashboard",
+      "assigned_to": "Priya Shah",
+      "due_date": "2026-11-25",
+      "priority": "medium",
+      "evidence": "Yes, I'll deliver the dashboard prototype by November 25."
+    },
+    {
+      "title": "Run regression tests",
+      "description": "Execute regression tests on the dashboard prototype and send results",
+      "assigned_to": "Alex Kim",
+      "due_date": "2026-11-27",
+      "priority": "medium",
+      "evidence": "I can run regression tests once the prototype is ready. I'll send the results by November 27."
+    },
+    {
+      "title": "Confirm production API response schema",
+      "description": "Verify and confirm the API response schema with the backend team",
+      "assigned_to": "Morgan Lee",
+      "due_date": "2026-11-23",
+      "priority": "medium",
+      "evidence": "I'll confirm the production API response schema with the backend team by November 23."
+    }
+  ],
+  "project_group_created": true
+}

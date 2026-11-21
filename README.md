@@ -16,12 +16,14 @@ AI Meeting Management is a web app for scheduling and joining live meetings, cap
 ## What it does
 
 - **Accounts:** Register and sign in with a unique email address.
+- **Employee profiles:** Add a department, role, skills, experience, and a PDF, DOCX, or TXT resume for your private Project AI assistant.
 - **Meetings:** Schedule meetings, invite participants with a link, and join from a browser.
 - **Live meeting tools:** Audio, camera, screen sharing, participant list, meeting chat, and presentation pinning.
 - **AI meeting listener:** A LiveKit agent joins the room and transcribes speech. Meeting audio and video are not stored.
 - **Meeting follow-up:** When the organizer ends a meeting, Groq can generate a summary, key points, decisions, project details, and action items with owners and due dates when supported by the transcript.
 - **Project groups:** Meeting participants can continue in a shared project chat, with member management and unread message counts.
-- **Project assistant:** Each group member has a private AI chat grounded in that project's meeting information.
+- **Project assistant:** Each group member has a private AI chat. PostgreSQL full-text search and optional semantic vector search retrieve relevant meeting summaries, transcript passages, project chat messages, and action items. Current task records are also fetched directly from the project database. Answers cite the project sources they use.
+- **Daily updates:** Employees submit a dated update for each project with their account email, project ID, current focus, completed work, remaining work, blockers, and optional hours. They can record a no-work day. Project administrators can see submissions and which project members have not reported.
 - **Database options:** SQLite for a quick local start, or PostgreSQL for a shared development database.
 
 ## How the AI workflow fits together
@@ -43,7 +45,9 @@ flowchart LR
 - A LiveKit Cloud project or reachable self-hosted LiveKit server
 - Deepgram API key for speech transcription
 - Groq API key for meeting summaries, task extraction, and project AI chat
+- OpenAI API key for semantic embeddings (Groq remains the chat model)
 - PostgreSQL only if you choose PostgreSQL instead of the default SQLite setup
+- The pgvector PostgreSQL extension to enable semantic search
 
 ## Quick start on Windows
 
@@ -87,6 +91,7 @@ Set these values in `.env`:
 | `DEEPGRAM_API_KEY` | Speech-to-text service used by the meeting listener. |
 | `GROQ_API_KEY` | Groq key used for meeting reports and project AI. |
 | `GROQ_MODEL` | Optional model override; defaults to `openai/gpt-oss-120b`. |
+| `OPENAI_API_KEY` | OpenAI key used only to create semantic search embeddings. |
 | `DB_ENGINE` | `sqlite` by default; set to `postgresql` to use PostgreSQL. |
 
 Keep `.env` private and never commit it. `.env.example` is the safe template to share; put only blank values or non-secret defaults in that file.
@@ -100,6 +105,16 @@ The web app and listener run as separate processes. After configuring LiveKit an
 ```
 
 Keep the listener running while meetings are active. It joins rooms through LiveKit, applies Silero voice activity detection, and sends speech to Deepgram for transcription. When an organizer ends a meeting, the app uses the saved transcript to create the AI report and project follow-up.
+
+### Automatically end meetings at their deadline
+
+Run this command in another PowerShell window so end times are enforced even when nobody has the meeting page open:
+
+```powershell
+.\.venv\Scripts\python.exe manage.py expire_meetings
+```
+
+The checker polls every 15 seconds by default. You can choose a different polling interval with `--interval 5`. If this process is not running, the app still rejects a late join and marks an expired meeting ended the next time a user opens the dashboard, meeting list, meeting page, or join link.
 
 ### Use PostgreSQL
 
@@ -122,6 +137,20 @@ python manage.py migrate
 
 Switching `DB_ENGINE` changes which database Django connects to; it does not copy data between SQLite and PostgreSQL.
 
+PostgreSQL full-text search remains available as a fallback. Semantic vector search uses OpenAI's `text-embedding-3-small` embeddings with pgvector; it is enabled when `OPENAI_API_KEY` is set and the `vector` extension is installed in the active database. If either is missing, the project assistant continues using full-text search. SQLite supports local tests but does not run semantic vector queries.
+
+#### Enable semantic vector search
+
+Install the pgvector extension files for the same PostgreSQL version used by this project, then connect to the `meeting_ai` database as a database owner and run:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+Add `OPENAI_API_KEY=...` to `.env` (never commit or paste the key into chat), restart Django, and ask a question in a project group. On the first query, the app creates embeddings for that project's meeting summaries, transcripts, project chat, and action items; later queries reuse the saved embeddings and update changed sources. Daily updates are available to project administrators on the Team updates page; they are intentionally not exposed to ordinary project group assistants.
+
+For a Windows PostgreSQL installation, pgvector must be installed for the matching PostgreSQL major version before the SQL command above will work. The official pgvector project documents Windows compilation using Visual Studio C++ Build Tools and `nmake`: [pgvector installation instructions](https://github.com/pgvector/pgvector#installation-notes---windows). PostgreSQL 14 requires the pgvector files built for PostgreSQL 14.
+
 ## Test from another device
 
 Camera and microphone access on phones and other computers requires HTTPS. For a temporary local test, run Django and expose it through a trusted HTTPS tunnel such as [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/). Configure `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, and `DJANGO_TRUST_PROXY_SSL` for the tunnel URL, then open that HTTPS address on both devices. Stop the tunnel after testing; its temporary URL gives access to your local app while it is running.
@@ -142,6 +171,7 @@ scripts/                Synthetic Groq meeting demo
 
 - Meeting audio and video are streamed through LiveKit; this app does not save the media.
 - Speech transcripts and AI-generated meeting reports are saved in the configured database.
+- Professional profile details and extracted resume text are sent to Groq only when that user asks Project AI for help. Age stays in the profile and is excluded from AI context.
 - Keep API keys, database passwords, and `DJANGO_SECRET_KEY` out of source control.
 - Before deploying publicly, configure a strong secret key, `DJANGO_DEBUG=False`, production hosts and HTTPS settings, and a production-grade database. The development server is for local use only.
 

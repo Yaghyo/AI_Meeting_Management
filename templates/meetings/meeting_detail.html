@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block title %}{{ meeting.title }} · AI Meeting Management{% endblock %}
+{% block content %}
+<p><a href="{% url 'meetings_page' %}">← All meetings</a></p>
+<section><h1>{{ meeting.title }}</h1><p>{{ meeting.scheduled_at|date:'D, d M Y · H:i' }} IST{% if meeting.ends_at %} – {{ meeting.ends_at|date:'H:i' }} IST{% endif %} · {{ meeting.get_status_display }}</p><p>Organizer: {{ meeting.created_by.username }}{% if meeting.project %} · Project: {{ meeting.project.name }}{% endif %}</p>
+{% if meeting.status == 'scheduled' or meeting.status == 'live' %}<a class="button" href="{% url 'meeting_room' meeting.pk %}">Join meeting</a>{% endif %}</section>
+<section><h2>Participants</h2><ul>{% for person in meeting.participants.all %}<li>{{ person.get_full_name|default:person.username }}</li>{% empty %}<li>No participants have joined yet.</li>{% endfor %}</ul></section>
+{% if can_view_report %}{% if report %}<section><h2>AI summary</h2><p>{{ report.summary|linebreaksbr }}</p><a href="{% url 'meeting_ai_report' meeting.pk %}">Open full report and action items</a></section>{% elif meeting.status == 'ended' %}<section><h2>Meeting report</h2><p>The report is not available yet.</p><a href="{% url 'meeting_ai_report' meeting.pk %}">Open report page</a></section>{% endif %}{% endif %}
+{% endblock %}

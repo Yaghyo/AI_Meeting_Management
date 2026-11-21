@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} · Meeting AI{% endblock %}
+{% block content %}
+<p><a href="{% url 'dashboard' %}">← Dashboard</a></p>
+<h1>{{ title }}</h1>
+<p class="muted">Set the meeting title and time, then create it. You can invite employees now or add them later.</p>
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">{% if title == 'Schedule a meeting' %}Create meeting{% else %}Save changes{% endif %}</button>
+  <a href="{% url 'dashboard' %}">Cancel</a>
+</form>
+{% endblock %}

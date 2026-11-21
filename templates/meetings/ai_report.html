@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}AI meeting report · {{ meeting.title }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'meeting_detail' meeting.pk %}">← Meeting details</a></p>
+<h1>AI meeting report</h1>
+<p class="muted">{{ meeting.title }}{% if meeting.project %} · Project: {{ meeting.project.name }}{% endif %}</p>
+{% if report %}
+  <article>
+    <h2>Summary</h2><p>{{ report.summary|linebreaksbr }}</p>
+    <small>Generated {{ report.generated_at|date:'d M Y, H:i' }} · {{ report.model }}</small>
+    {% if report.project_name %}<h3>Project: {{ report.project_name }}</h3>{% endif %}
+    {% if report.project_description %}<p>{{ report.project_description|linebreaksbr }}</p>{% endif %}
+    {% if report.key_points %}<h3>Key points</h3><ul>{% for point in report.key_points %}<li>{{ point }}</li>{% endfor %}</ul>{% endif %}
+    {% if report.decisions %}<h3>Decisions</h3><ul>{% for decision in report.decisions %}<li>{{ decision }}</li>{% endfor %}</ul>{% endif %}
+    {% if report.project_updates %}<h3>Project updates</h3><ul>{% for update in report.project_updates %}<li>{{ update }}</li>{% endfor %}</ul>{% endif %}
+  </article>
+  <article>
+    <h2>Action items</h2>
+    {% for item in action_items %}<div style="border-top:1px solid #dce2ec;padding:.7rem 0"><h3>{{ item.title }}</h3><p>{{ item.description }}</p><p><strong>Assigned to:</strong> {% if item.assigned_to %}{{ item.assigned_to.get_full_name|default:item.assigned_to.username }}{% else %}Unassigned{% endif %} · <strong>Priority:</strong> {{ item.get_priority_display }} · <strong>Status:</strong> {{ item.get_status_display }}{% if item.due_date %} · <strong>Due:</strong> {{ item.due_date }}{% endif %}</p>{% if item.evidence %}<small>Transcript evidence: “{{ item.evidence }}”</small>{% endif %}</div>
+    {% empty %}<p>No action items were identified.</p>{% endfor %}
+  </article>
+{% elif report_pending %}
+  <article><h2>Report not ready</h2><p>The transcript could not be processed. Check that the Groq API key and model are valid and that the transcript is available, then end the meeting again to retry.</p></article>
+{% elif meeting.status == 'ended' %}
+  <article><h2>No transcript available</h2><p>There are no saved transcript lines to summarize for this meeting.</p></article>
+{% else %}
+  <article><h2>Report will be generated when the meeting ends</h2><p>Groq will create the summary and action items after the organizer ends the meeting.</p></article>
+{% endif %}
+{% endblock %}

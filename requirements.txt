@@ -1,0 +1,8 @@
+Django>=5.2,<5.3
+livekit-api>=1.2.3,<2.0
+livekit-agents[deepgram,silero]>=1.8,<1.9
+python-dotenv>=1.0,<2.0
+psycopg[binary]>=3.1.8,<4
+openai>=2.0,<4
+pypdf>=5.0,<8
+python-docx>=1.1,<2

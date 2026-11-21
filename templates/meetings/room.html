@@ -1,0 +1,341 @@
+{% extends 'base.html' %}
+{% block title %}{{ meeting.title }} · Meeting AI{% endblock %}
+{% block body_class %}meet-page{% endblock %}
+{% block content %}
+<main class="meet-shell">
+  <div class="meet-topbar">
+    <a class="meet-brand" href="{% url 'dashboard' %}">AI Meeting Management</a>
+    <div class="meet-title-block">
+      <div class="meet-title">{{ meeting.title }}</div>
+      <div class="meet-meta">{{ meeting.scheduled_at|date:'D, d M · H:i' }} IST{% if meeting.ends_at %} · Ends {{ meeting.ends_at|date:'H:i' }} IST{% endif %}</div>
+    </div>
+    <div id="meet-status" class="meet-state" aria-live="polite">Ready to join</div>
+  </div>
+
+  <section class="meet-stage" aria-label="Meeting participants">
+    <div id="meet-layout" class="meet-layout">
+      <section id="presentation-area" class="meet-presentation" aria-label="Shared screen" hidden>
+        <div class="presentation-heading"><span id="presentation-owner">Screen presentation</span><button id="pin-screen" class="pin-control" type="button" aria-pressed="false">Pin presentation</button></div>
+        <div id="presentation-screen" class="presentation-screen"></div>
+      </section>
+      <div id="participant-grid" class="meet-grid" aria-live="polite">
+        <div id="call-placeholder" class="meet-placeholder">Your camera and microphone will connect when you join.</div>
+      </div>
+    </div>
+  </section>
+
+  <p id="call-error" class="meet-error" role="alert"></p>
+
+  <button id="meeting-panel-toggle" class="meet-button meet-side-button" type="button">People & chat</button>
+  <aside id="meeting-sidebar" class="meeting-sidebar" aria-label="Meeting details">
+    <div class="panel-switch"><button type="button" class="meet-button active" data-panel="people">People</button><button type="button" class="meet-button" data-panel="chat">Chat</button><button id="meeting-panel-close" type="button" class="meet-button">Close</button></div>
+    <section id="people-panel"><h2>People in this meeting <span id="roster-count"></span></h2><ul id="roster-list" class="roster-list"></ul></section>
+    <section id="chat-panel" hidden><h2>In-call messages</h2><ul id="chat-messages" class="chat-messages" aria-live="polite"></ul><form id="meeting-chat-form" class="meeting-chat-form"><input id="meeting-chat-input" maxlength="500" placeholder="Send a message" aria-label="Message"><button type="submit">Send</button></form></section>
+  </aside>
+
+  <div class="meet-toolbar">
+    <div class="meet-toolbar-side"><span id="participant-count">Not connected</span></div>
+    <div class="meet-controls">
+      <button id="mic-button" class="meet-button" type="button" disabled aria-label="Mute microphone">🎙 Mic</button>
+      <button id="camera-button" class="meet-button" type="button" disabled aria-label="Turn camera off">▣ Camera</button>
+      <button id="screen-button" class="meet-button" type="button" disabled aria-label="Share screen">▱ Present</button>
+      <button id="join-button" class="meet-button active" type="button">Join now</button>
+      {% if can_end_meeting %}<button id="end-button" class="meet-button end" type="button">End meeting</button>{% else %}<button id="leave-button" class="meet-button hangup" type="button" disabled>Leave</button>{% endif %}
+    </div>
+    <div class="meet-toolbar-side right"><button id="copy-invite" class="meet-button meet-copy" type="button" data-invite-url="{{ invite_url }}">Copy invite link</button></div>
+  </div>
+  <p class="meet-meta" style="text-align:center">Audio and video are not recorded. Speech transcripts are saved for the meeting summary and action items.</p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.24.1/dist/livekit-client.umd.min.js" defer></script>
+<script>
+(() => {
+  const meetingId = {{ meeting.pk }};
+  const csrfToken = '{{ csrf_token }}';
+  const statusEl = document.getElementById('meet-status');
+  const errorEl = document.getElementById('call-error');
+  const grid = document.getElementById('participant-grid');
+  const countEl = document.getElementById('participant-count');
+  const presentationArea = document.getElementById('presentation-area');
+  const presentationScreen = document.getElementById('presentation-screen');
+  const meetStage = document.querySelector('.meet-stage');
+  const joinButton = document.getElementById('join-button');
+  const micButton = document.getElementById('mic-button');
+  const cameraButton = document.getElementById('camera-button');
+  const screenButton = document.getElementById('screen-button');
+  const leaveButton = document.getElementById('leave-button');
+  const endButton = document.getElementById('end-button');
+  const rosterList = document.getElementById('roster-list');
+  const chatMessages = document.getElementById('chat-messages');
+  let room = null;
+  let micEnabled = true;
+  let cameraEnabled = true;
+  let screenEnabled = false;
+  let meetingEnded = false;
+  let listenerStatus = 'Waiting for meeting connection';
+
+  function renderRoster() {
+    if (!rosterList) return;
+    rosterList.replaceChildren();
+    const participants = room ? [room.localParticipant, ...room.remoteParticipants.values()] : [];
+    let listenerFound = false;
+    for (const participant of participants) {
+      const item = document.createElement('li');
+      const isListener = participant.isAgent || participant.identity.startsWith('agent-');
+      if (isListener) listenerFound = true;
+      item.className = isListener ? 'roster-agent' : '';
+      item.textContent = isListener
+        ? 'AI Listener - Connected and transcribing'
+        : `${participant.name || participant.identity}${participant.isSpeaking ? ' - speaking' : ''}${participant.isLocal ? ' - you' : ''}`;
+      rosterList.appendChild(item);
+    }
+    if (!listenerFound) {
+      const item = document.createElement('li');
+      item.className = 'roster-agent';
+      item.textContent = `AI Listener - ${listenerStatus}`;
+      rosterList.appendChild(item);
+    }
+    document.getElementById('roster-count').textContent = participants.filter((participant) => !(participant.isAgent || participant.identity.startsWith('agent-'))).length ? `(${participants.filter((participant) => !(participant.isAgent || participant.identity.startsWith('agent-'))).length})` : '';
+  }
+
+  function appendChatMessage(message) {
+    const item = document.createElement('li');
+    const label = document.createElement('strong');
+    label.textContent = `${message.name || message.identity}: `;
+    item.append(label, document.createTextNode(message.text || ''));
+    chatMessages.appendChild(item);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function handleRoomMessage(payload, participant, kind, topic) {
+    if (topic !== 'meeting-chat') return;
+    try { appendChatMessage(JSON.parse(new TextDecoder().decode(payload))); } catch (_) {}
+  }
+
+  function tileFor(identity, displayName) {
+    let tile = document.querySelector(`[data-identity="${CSS.escape(identity)}"]`);
+    if (!tile) {
+      tile = document.createElement('div');
+      tile.className = 'meet-tile';
+      tile.dataset.identity = identity;
+      const label = document.createElement('div');
+      label.className = 'meet-name';
+      label.textContent = displayName || identity;
+      const pin = document.createElement('button');
+      pin.type = 'button';
+      pin.className = 'tile-pin';
+      pin.textContent = 'Pin';
+      pin.setAttribute('aria-pressed', 'false');
+      pin.addEventListener('click', () => {
+        const pinned = tile.classList.toggle('pinned');
+        document.querySelectorAll('.meet-tile').forEach((other) => {
+          if (other !== tile) {
+            other.classList.remove('pinned');
+            const otherPin = other.querySelector('.tile-pin');
+            if (otherPin) { otherPin.textContent = 'Pin'; otherPin.setAttribute('aria-pressed', 'false'); }
+          }
+        });
+        pin.setAttribute('aria-pressed', String(pinned));
+        pin.textContent = pinned ? 'Pinned' : 'Pin';
+        if (pinned) grid.prepend(tile);
+      });
+      tile.append(pin, label);
+      grid.appendChild(tile);
+    }
+    return tile;
+  }
+
+  function attachTrack(track, participant, publication) {
+    if (!track || !publication) return;
+    if (document.querySelector(`[data-track-sid="${CSS.escape(track.sid)}"]`)) return;
+    if (publication.source === LivekitClient.Track.Source.ScreenShare) {
+      presentationArea.hidden = false;
+      meetStage.classList.add('has-presentation');
+      document.getElementById('presentation-owner').textContent = `${participant.name || participant.identity} is presenting`;
+      const screenTrack = track.attach();
+      screenTrack.classList.add('presented-video');
+      screenTrack.dataset.trackSid = track.sid;
+      presentationScreen.appendChild(screenTrack);
+      return;
+    }
+    const tile = tileFor(participant.identity, participant.name);
+    const element = track.attach();
+    element.dataset.trackSid = track.sid;
+    tile.appendChild(element);
+  }
+
+  function removeTrack(track, publication) {
+    track.detach().forEach((element) => element.remove());
+    if (publication?.source === LivekitClient.Track.Source.ScreenShare && !presentationScreen.children.length) {
+      presentationArea.hidden = true;
+      meetStage.classList.remove('has-presentation');
+    }
+  }
+
+  function setConnected(connected) {
+    statusEl.textContent = meetingEnded ? 'Meeting ended' : connected ? 'In the meeting' : 'Not connected';
+    joinButton.disabled = connected || meetingEnded;
+    micButton.disabled = !connected;
+    cameraButton.disabled = !connected;
+    screenButton.disabled = !connected;
+    if (leaveButton) leaveButton.disabled = !connected;
+    if (connected) document.getElementById('call-placeholder')?.remove();
+  }
+
+  function updateCount() {
+    const remoteCount = room ? [...room.remoteParticipants.values()].filter((participant) => !participant.identity.startsWith('agent-')).length : 0;
+    countEl.textContent = room ? `${remoteCount + 1} in meeting` : meetingEnded ? 'Meeting ended' : 'Not connected';
+    renderRoster();
+  }
+
+  async function joinMeeting() {
+    errorEl.textContent = '';
+    joinButton.disabled = true;
+    statusEl.textContent = 'Connecting…';
+    try {
+      const response = await fetch(`/meetings/${meetingId}/token/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken, 'Accept': 'application/json'},
+        credentials: 'same-origin',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not get a meeting token.');
+      listenerStatus = !data.transcription_configured ? 'Deepgram is not configured' : data.listener_dispatched ? 'Connecting...' : 'Worker offline';
+      renderRoster();
+      if (!window.LivekitClient) throw new Error('The LiveKit browser SDK did not load. Check your internet connection and reload.');
+
+      room = new LivekitClient.Room({adaptiveStream: true, dynacast: true});
+      room.on(LivekitClient.RoomEvent.DataReceived, handleRoomMessage);
+      room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => attachTrack(track, participant, publication));
+      room.on(LivekitClient.RoomEvent.TrackUnsubscribed, removeTrack);
+      room.on(LivekitClient.RoomEvent.LocalTrackPublished, (publication) => { if (publication.track) attachTrack(publication.track, room.localParticipant, publication); });
+      room.on(LivekitClient.RoomEvent.LocalTrackUnpublished, (publication) => { if (publication.track) removeTrack(publication.track, publication); });
+      room.on(LivekitClient.RoomEvent.ParticipantConnected, (participant) => {
+        if (participant.isAgent || participant.identity.startsWith('agent-')) listenerStatus = 'Connected and transcribing';
+        updateCount();
+      });
+      room.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
+        document.querySelector(`[data-identity="${CSS.escape(participant.identity)}"]`)?.remove();
+        if (participant.isAgent || participant.identity.startsWith('agent-')) listenerStatus = 'Disconnected';
+        updateCount();
+      });
+      room.on(LivekitClient.RoomEvent.Disconnected, () => {
+        setConnected(false);
+        updateCount();
+        if (!meetingEnded) {
+          statusEl.textContent = 'You left the meeting';
+          joinButton.disabled = false;
+        }
+      });
+
+      await room.connect(data.url, data.token);
+      await room.localParticipant.enableCameraAndMicrophone();
+      tileFor(room.localParticipant.identity, data.participant);
+      room.localParticipant.trackPublications.forEach((publication) => {
+        if (publication.track) attachTrack(publication.track, room.localParticipant, publication);
+      });
+      setConnected(true);
+      updateCount();
+    } catch (error) {
+      errorEl.textContent = error.message || 'Could not join the meeting.';
+      statusEl.textContent = 'Not connected';
+      joinButton.disabled = false;
+      if (room) { room.disconnect(); room = null; }
+    }
+  }
+
+  async function copyInvite() {
+    const button = document.getElementById('copy-invite');
+    try {
+      await navigator.clipboard.writeText(button.dataset.inviteUrl);
+      button.textContent = 'Link copied';
+    } catch (_) {
+      window.prompt('Copy this meeting invite link:', button.dataset.inviteUrl);
+    }
+  }
+
+  async function stopMeeting() {
+    if (!window.confirm('Stop the meeting for everyone?')) return;
+    endButton.disabled = true;
+    errorEl.textContent = '';
+    try {
+      const response = await fetch(`/meetings/${meetingId}/end/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken, 'Accept': 'application/json'},
+        credentials: 'same-origin',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not end the meeting.');
+      meetingEnded = true;
+      room?.disconnect();
+      setConnected(false);
+      updateCount();
+      statusEl.textContent = data.report_generated ? 'Meeting ended · summary ready' : data.report_pending ? 'Meeting ended · summary pending' : 'Meeting ended';
+      if (data.report_pending) errorEl.textContent = 'The project group is ready. The transcript worker will retry the report when it finishes.';
+      setTimeout(() => { window.location.href = '/'; }, 1800);
+    } catch (error) {
+      errorEl.textContent = error.message || 'Could not end the meeting.';
+      endButton.disabled = false;
+    }
+  }
+
+  joinButton.addEventListener('click', joinMeeting);
+  document.getElementById('copy-invite').addEventListener('click', copyInvite);
+  micButton.addEventListener('click', async () => {
+    if (!room) return;
+    micEnabled = !micEnabled;
+    await room.localParticipant.setMicrophoneEnabled(micEnabled);
+    micButton.textContent = micEnabled ? '🎙 Mic' : '🔇 Muted';
+    micButton.classList.toggle('active', !micEnabled);
+  });
+  cameraButton.addEventListener('click', async () => {
+    if (!room) return;
+    cameraEnabled = !cameraEnabled;
+    await room.localParticipant.setCameraEnabled(cameraEnabled);
+    cameraButton.textContent = cameraEnabled ? '▣ Camera' : '▧ Camera off';
+    cameraButton.classList.toggle('active', !cameraEnabled);
+  });
+  screenButton.addEventListener('click', async () => {
+    if (!room) return;
+    screenEnabled = !screenEnabled;
+    await room.localParticipant.setScreenShareEnabled(screenEnabled);
+    screenButton.textContent = screenEnabled ? '▱ Stop presenting' : '▱ Present';
+    screenButton.classList.toggle('active', screenEnabled);
+    if (!screenEnabled) {
+      presentationScreen.replaceChildren();
+      presentationArea.hidden = true;
+      meetStage.classList.remove('has-presentation');
+    } else {
+      room.localParticipant.trackPublications.forEach((publication) => {
+        if (publication.track) attachTrack(publication.track, room.localParticipant, publication);
+      });
+    }
+  });
+  if (leaveButton) leaveButton.addEventListener('click', () => { room?.disconnect(); window.location.assign('/'); });
+  if (endButton) endButton.addEventListener('click', stopMeeting);
+  document.getElementById('pin-screen').addEventListener('click', (event) => {
+    const pinned = event.currentTarget.getAttribute('aria-pressed') !== 'true';
+    event.currentTarget.setAttribute('aria-pressed', String(pinned));
+    event.currentTarget.textContent = pinned ? 'Pinned' : 'Pin presentation';
+    presentationArea.classList.toggle('pinned', pinned);
+  });
+  document.getElementById('meeting-panel-toggle').addEventListener('click', () => document.getElementById('meeting-sidebar').classList.add('open'));
+  document.getElementById('meeting-panel-close').addEventListener('click', () => document.getElementById('meeting-sidebar').classList.remove('open'));
+  document.querySelectorAll('[data-panel]').forEach((button) => button.addEventListener('click', () => {
+    document.getElementById('people-panel').hidden = button.dataset.panel !== 'people';
+    document.getElementById('chat-panel').hidden = button.dataset.panel !== 'chat';
+    document.querySelectorAll('[data-panel]').forEach((tab) => tab.classList.toggle('active', tab === button));
+  }));
+  document.getElementById('meeting-chat-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = document.getElementById('meeting-chat-input');
+    const text = input.value.trim();
+    if (!text || !room) return;
+    await room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({name: room.localParticipant.name, identity: room.localParticipant.identity, text})), {reliable: true, topic: 'meeting-chat'});
+    appendChatMessage({name: room.localParticipant.name, identity: room.localParticipant.identity, text});
+    input.value = '';
+  });
+  window.addEventListener('beforeunload', () => room?.disconnect());
+})();
+</script>
+{% endblock %}

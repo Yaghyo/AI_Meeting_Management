@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Daily update · AI Meeting Management{% endblock %}
+{% block content %}
+<div class="daily-page">
+  <header class="daily-hero"><div class="daily-hero-mark">✓</div><div><div class="eyebrow">TEAM PROGRESS</div><h1>Daily update</h1><p>Share what moved forward today, what remains, and where you need help.</p></div><span class="daily-date">{{ today|date:'l · d M Y' }}</span></header>
+
+  <div class="daily-layout">
+    <form class="daily-form-card" method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="daily-errors">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="daily-form-heading"><div><h2>Today’s work</h2><p>One update per project each day. You can edit and resubmit it later today.</p></div></div>
+      <div class="daily-identity-grid">
+        <div><label for="daily-email">Account email</label><input id="daily-email" type="email" value="{{ user.email }}" readonly><small>Tied to your signed-in account</small></div>
+        <div><label for="id_project_id">{{ form.project_id.label }}</label>{{ form.project_id }}<small>{{ form.project_id.help_text }}</small>{% for error in form.project_id.errors %}<small class="daily-error">{{ error }}</small>{% endfor %}</div>
+      </div>
+      {% if projects %}<details class="daily-project-helper"><summary>Find my project ID</summary><ul>{% for project in projects %}<li><strong>{{ project.name }}</strong><code>{{ project.public_id }}</code></li>{% endfor %}</ul></details>{% else %}<p class="daily-no-project">You are not currently in a project group, so there is no project ID to submit against.</p>{% endif %}
+
+      <div class="daily-fields">
+        {% for field in form.visible_fields %}
+          {% if field.name != 'project_id' and field.name != 'no_work_today' %}<div class="daily-field {% if field.name == 'completed_today' or field.name == 'remaining_work' %}daily-field-wide{% endif %}">{{ field.label_tag }}{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{% for error in field.errors %}<small class="daily-error">{{ error }}</small>{% endfor %}</div>{% endif %}
+        {% endfor %}
+      </div>
+      <label class="daily-no-work">{{ form.no_work_today }}<span><strong>I did not work on this project today</strong><small>Use this for a day off, leave, or another day with no project work. Add context under blockers if useful.</small></span></label>
+      {% for error in form.no_work_today.errors %}<small class="daily-error">{{ error }}</small>{% endfor %}
+      <div class="daily-submit-row"><span>Your update is visible to project administrators.</span><button type="submit">Submit today’s update <span>→</span></button></div>
+    </form>
+
+    <aside class="daily-side-card">
+      <div class="daily-side-icon">✦</div><div class="eyebrow">A USEFUL UPDATE</div><h2>Make progress easy to understand</h2>
+      <ul><li><strong>Be specific</strong><span>Name the feature, deliverable, or task.</span></li><li><strong>Show the result</strong><span>Include a count, milestone, decision, or other evidence when you have it.</span></li><li><strong>Make remaining work clear</strong><span>Share the next step and any blocker that needs help.</span></li></ul>
+      <div class="daily-side-footer">This creates a dated record for project reporting. It does not guess effort or completion.</div>
+    </aside>
+  </div>
+
+  <section class="daily-today-list"><div class="daily-section-heading"><div><div class="eyebrow">YOUR SUBMISSIONS</div><h2>Updates submitted today</h2></div><span>{{ today_updates|length }} project{{ today_updates|length|pluralize }}</span></div>
+    {% for update in today_updates %}<article class="daily-update-preview"><div class="daily-project-dot">{{ update.project.name|first|upper }}</div><div class="daily-preview-copy"><strong>{{ update.project.name }}</strong><p>{% if update.no_work_today %}No project work reported today.{% else %}{{ update.completed_today|truncatechars:180 }}{% endif %}</p><small>{% if update.blockers %}Blocker: {{ update.blockers|truncatechars:100 }}{% else %}No blocker recorded{% endif %}</small></div><span class="daily-saved-tag">Saved</span></article>{% empty %}<p class="daily-empty">No project updates submitted yet today.</p>{% endfor %}
+  </section>
+</div>
+{% endblock %}
