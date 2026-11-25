@@ -20,6 +20,8 @@ from django.contrib.auth import views as auth_views
 from apps.accounts.views import EmailAuthenticationForm, profile_detail, register
 from apps.meetings import views as meeting_views
 from apps.projects import views as project_views
+from apps.projects import company_admin as company_admin_views
+from apps.projects import company_assistant as company_assistant_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -47,4 +49,7 @@ urlpatterns = [
     path('chat/unread/', project_views.unread_counts, name='unread_counts'),
     path('daily-updates/', project_views.daily_update_submit, name='daily_update_submit'),
     path('daily-updates/overview/', project_views.daily_update_overview, name='daily_update_overview'),
+    path('company/employees/', company_admin_views.employee_updates, name='company_employee_updates'),
+    path('company/employees/<int:user_id>/', company_admin_views.employee_detail, name='company_employee_detail'),
+    path('company/assistant/', company_assistant_views.company_ai, name='company_ai'),
 ]

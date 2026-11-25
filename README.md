@@ -24,6 +24,8 @@ AI Meeting Management is a web app for scheduling and joining live meetings, cap
 - **Project groups:** Meeting participants can continue in a shared project chat, with member management and unread message counts.
 - **Project assistant:** Each group member has a private AI chat. PostgreSQL full-text search and optional semantic vector search retrieve relevant meeting summaries, transcript passages, project chat messages, and action items. Current task records are also fetched directly from the project database. Answers cite the project sources they use.
 - **Daily updates:** Employees submit a dated update for each project with their account email, project ID, current focus, completed work, remaining work, blockers, and optional hours. They can record a no-work day. Project administrators can see submissions and which project members have not reported.
+- **Admin workspace:** App administrators sign in through the same login as employees. Their sidebar includes an employee directory with private profile, project, assigned-task, and daily-update pages. Employees cannot browse these admin pages or view another employee's daily submissions.
+- **Company AI:** Administrators can ask company-wide questions about employee profiles, daily submissions, projects, meeting records, tasks, and blockers. The assistant retrieves relevant company records and uses Groq to prepare a grounded answer.
 - **Database options:** SQLite for a quick local start, or PostgreSQL for a shared development database.
 
 ## How the AI workflow fits together
@@ -171,7 +173,9 @@ scripts/                Synthetic Groq meeting demo
 
 - Meeting audio and video are streamed through LiveKit; this app does not save the media.
 - Speech transcripts and AI-generated meeting reports are saved in the configured database.
-- Professional profile details and extracted resume text are sent to Groq only when that user asks Project AI for help. Age stays in the profile and is excluded from AI context.
+- Daily work submissions and employee details are visible in the app only to authorized app administrators; submitted work is not shown in other employees' views or project chats.
+- Company AI sends the relevant records retrieved for an administrator's question to Groq for answer generation. Project AI is restricted to the selected project group and its members; employees cannot retrieve another project's records by asking about it.
+- Project AI sends the current employee's professional profile and extracted resume text to Groq when that employee asks Project AI for help; it stays within that employee's selected project context. Company AI sends relevant employee details, daily submissions, and project records to Groq when an authorized admin asks a question.
 - Keep API keys, database passwords, and `DJANGO_SECRET_KEY` out of source control.
 - Before deploying publicly, configure a strong secret key, `DJANGO_DEBUG=False`, production hosts and HTTPS settings, and a production-grade database. The development server is for local use only.
 

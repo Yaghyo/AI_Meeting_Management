@@ -1,0 +1,2 @@
+-r requirements.txt
+livekit-agents[deepgram,silero]>=1.8,<1.9

@@ -32,8 +32,5 @@
     </aside>
   </div>
 
-  <section class="daily-today-list"><div class="daily-section-heading"><div><div class="eyebrow">YOUR SUBMISSIONS</div><h2>Updates submitted today</h2></div><span>{{ today_updates|length }} project{{ today_updates|length|pluralize }}</span></div>
-    {% for update in today_updates %}<article class="daily-update-preview"><div class="daily-project-dot">{{ update.project.name|first|upper }}</div><div class="daily-preview-copy"><strong>{{ update.project.name }}</strong><p>{% if update.no_work_today %}No project work reported today.{% else %}{{ update.completed_today|truncatechars:180 }}{% endif %}</p><small>{% if update.blockers %}Blocker: {{ update.blockers|truncatechars:100 }}{% else %}No blocker recorded{% endif %}</small></div><span class="daily-saved-tag">Saved</span></article>{% empty %}<p class="daily-empty">No project updates submitted yet today.</p>{% endfor %}
-  </section>
 </div>
 {% endblock %}

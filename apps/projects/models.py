@@ -49,6 +49,21 @@ class ProjectAIMessage(models.Model):
         ordering = ['created_at', 'id']
 
 
+class CompanyAIMessage(models.Model):
+    class Role(models.TextChoices):
+        USER = 'user', 'User'
+        ASSISTANT = 'assistant', 'Assistant'
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='company_ai_messages')
+    role = models.CharField(max_length=10, choices=Role.choices)
+    body = models.TextField(max_length=8000)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+        indexes = [models.Index(fields=('user', 'created_at'), name='company_ai_user_time_idx')]
+
+
 class DailyUpdate(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='daily_updates')
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='daily_updates')

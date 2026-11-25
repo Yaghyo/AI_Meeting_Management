@@ -335,13 +335,9 @@ def daily_update_submit(request):
             messages.success(request, f'Your {project.name} update was saved. You can edit it again today.')
             return redirect('daily_update_submit')
 
-    today_updates = DailyUpdate.objects.filter(
-        user=request.user, report_date=timezone.localdate(),
-    ).select_related('project').order_by('project__name')
     return render(request, 'projects/daily_update.html', {
         'form': form,
         'projects': projects,
-        'today_updates': today_updates,
         'today': timezone.localdate(),
     })
 

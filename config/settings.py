@@ -21,14 +21,25 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 import os
+from urllib.parse import parse_qs, unquote, urlparse
+
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 load_dotenv(BASE_DIR / '.env')
+load_dotenv(BASE_DIR / '.env.local', override=True)
 
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'dev-only-change-this-before-deploying')
+VERCEL_RUNTIME = os.environ.get('VERCEL', '').strip().lower() in {'1', 'true', 'yes'}
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
+default_debug = 'false'
+DEBUG = os.environ.get('DJANGO_DEBUG', default_debug).strip().lower() in {'1', 'true', 'yes', 'on'}
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '').strip()
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'development-only-insecure-secret-key'
+    else:
+        raise ImproperlyConfigured('Set DJANGO_SECRET_KEY to a private value in production.')
 
 def _csv_setting(name, default=''):
     return [value.strip() for value in os.environ.get(name, default).split(',') if value.strip()]
@@ -36,14 +47,23 @@ def _csv_setting(name, default=''):
 
 ALLOWED_HOSTS = _csv_setting('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,[::1]')
 CSRF_TRUSTED_ORIGINS = _csv_setting('DJANGO_CSRF_TRUSTED_ORIGINS')
+if VERCEL_RUNTIME:
+    if '.vercel.app' not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append('.vercel.app')
+    if 'https://*.vercel.app' not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append('https://*.vercel.app')
+    vercel_url = os.environ.get('VERCEL_URL', '').strip()
+    if vercel_url:
+        CSRF_TRUSTED_ORIGINS.append(f'https://{vercel_url}')
 
 # Set this only when a trusted HTTPS reverse proxy sets X-Forwarded-Proto.
-if os.environ.get('DJANGO_TRUST_PROXY_SSL', '').strip().lower() in {'1', 'true', 'yes', 'on'}:
+if VERCEL_RUNTIME or os.environ.get('DJANGO_TRUST_PROXY_SSL', '').strip().lower() in {'1', 'true', 'yes', 'on'}:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
 
 
 # Application definition
@@ -94,9 +114,32 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
 DB_ENGINE = os.environ.get('DB_ENGINE', 'sqlite').strip().lower()
 
-if DB_ENGINE in {'postgres', 'postgresql'}:
+if DATABASE_URL:
+    parsed_database_url = urlparse(DATABASE_URL)
+    if parsed_database_url.scheme not in {'postgres', 'postgresql'}:
+        raise ImproperlyConfigured('DATABASE_URL must use the postgres:// or postgresql:// scheme.')
+    database_query = parse_qs(parsed_database_url.query)
+    database_options = {}
+    sslmode = database_query.get('sslmode', ['require'])[0]
+    if sslmode:
+        database_options['sslmode'] = sslmode
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': unquote(parsed_database_url.path.lstrip('/')),
+            'USER': unquote(parsed_database_url.username or ''),
+            'PASSWORD': unquote(parsed_database_url.password or ''),
+            'HOST': parsed_database_url.hostname,
+            'PORT': parsed_database_url.port or '5432',
+            'OPTIONS': database_options,
+            'CONN_MAX_AGE': int(os.environ.get('DB_CONN_MAX_AGE', '0')),
+            'CONN_HEALTH_CHECKS': True,
+        },
+    }
+elif DB_ENGINE in {'postgres', 'postgresql'}:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -153,8 +196,25 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = '/media/'
+
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
+
+AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME', '').strip()
+if AWS_STORAGE_BUCKET_NAME:
+    STORAGES['default'] = {'BACKEND': 'storages.backends.s3.S3Storage'}
+    AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME', '').strip() or None
+    AWS_S3_ENDPOINT_URL = os.environ.get('AWS_S3_ENDPOINT_URL', '').strip() or None
+    AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID', '').strip()
+    AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY', '').strip()
+    AWS_DEFAULT_ACL = None
+    AWS_QUERYSTRING_AUTH = True
+    AWS_S3_FILE_OVERWRITE = False
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

@@ -4,6 +4,8 @@ db.sqlite3
 db.sqlite3.pre-postgres-backup
 .venv/
 .env
+.env.*
+!.env.example
 staticfiles/
 media/
 # Local Python virtual environment

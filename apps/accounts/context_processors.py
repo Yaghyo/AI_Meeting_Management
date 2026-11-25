@@ -3,12 +3,13 @@ from django.db.models import Count
 
 from apps.projects.models import ProjectGroup
 from apps.projects.models import DirectMessage, GroupMessage
+from .permissions import is_company_admin
 
 
 def sidebar_items(request):
     if not getattr(request, 'user', None) or not request.user.is_authenticated:
         return {}
-    if request.user.is_staff or request.user.role == 'admin':
+    if is_company_admin(request.user):
         groups = ProjectGroup.objects.select_related('project').order_by('project__name')
     else:
         groups = ProjectGroup.objects.filter(members=request.user).select_related('project').order_by('project__name')
